@@ -1,0 +1,9 @@
+{
+  "name": "noncompliant-repo",
+  "isArchived": false,
+  "isPrivate": false,
+  "defaultBranchRef": {
+    "name": "main",
+    "branchProtectionRule": null
+  }
+}

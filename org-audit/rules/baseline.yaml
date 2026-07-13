@@ -1,0 +1,42 @@
+# Branch-protection baseline for org-audit.
+#
+# Each rule cites the standard it operationalizes — see
+# .claude/references/git-security-standards.md for the full mapping. Edit this
+# file to change what "compliant" means for your org; no code changes needed.
+
+rules:
+  - id: branch_protection_exists
+    description: "Default branch must have a branch protection rule"
+    standard: "CIS Controls v8, Control 4 (Secure Configuration)"
+    check: exists
+
+  - id: admin_enforced
+    description: "Branch protection must apply to admins (no bypass)"
+    standard: "CIS Controls v8, Control 6 (Access Control Management / least privilege)"
+    field: isAdminEnforced
+    check: is_true
+
+  - id: min_approving_reviews
+    description: "At least 1 approving review required before merge"
+    standard: "CIS GitHub Benchmark; NIST SP 800-218 SSDF (review before merge)"
+    field: requiredApprovingReviewCount
+    check: min_value
+    value: 1
+
+  - id: no_force_push
+    description: "Force pushes to the default branch must be disallowed"
+    standard: "ISO/IEC 27001:2022 Annex A.8.24 (integrity of history)"
+    field: allowsForcePushes
+    check: is_false
+
+  - id: no_deletions
+    description: "Deletion of the default branch must be disallowed"
+    standard: "ISO/IEC 27001:2022 Annex A.8.24 (integrity of history)"
+    field: allowsDeletions
+    check: is_false
+
+  - id: requires_commit_signatures
+    description: "Commits to the default branch must require valid signatures"
+    standard: "NIST SP 800-218 SSDF (release integrity) — closes the gap noted in .claude/references/git-security-standards.md"
+    field: requiresCommitSignatures
+    check: is_true

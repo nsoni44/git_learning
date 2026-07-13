@@ -1,0 +1,18 @@
+{
+  "name": "compliant-repo",
+  "isArchived": false,
+  "isPrivate": false,
+  "defaultBranchRef": {
+    "name": "main",
+    "branchProtectionRule": {
+      "isAdminEnforced": true,
+      "allowsForcePushes": false,
+      "allowsDeletions": false,
+      "requiresApprovingReviews": true,
+      "requiredApprovingReviewCount": 2,
+      "requiresCodeOwnerReviews": true,
+      "requiresCommitSignatures": true,
+      "requiresStatusChecks": true
+    }
+  }
+}

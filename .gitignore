@@ -1,2 +1,5 @@
 sample.txt/
 logs/
+org-audit/.venv/
+__pycache__/
+*.pyc
