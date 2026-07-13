@@ -22,7 +22,7 @@ jobs:
           script: |
             const { owner, repo, number } = context.issue;
             let attempts = 0;
-            const maxAttempts = 30; // 5 minutes (30 * 10 seconds)
+            const maxAttempts = 30;
             
             while (attempts < maxAttempts) {
               const pr = await github.rest.pulls.get({
@@ -44,7 +44,7 @@ jobs:
               }
               
               attempts++;
-              await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+              await new Promise(resolve => setTimeout(resolve, 10000));
             }
             
             console.log('⏱️ Timeout waiting for checks. Aborting auto-merge.');
