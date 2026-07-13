@@ -25,6 +25,30 @@ print_result() {
     fi
 }
 
+# Portable epoch parsing (GNU date on Linux, BSD date on macOS)
+parse_epoch() {
+    local iso_date="$1"
+    if date -d "$iso_date" +%s 2>/dev/null; then
+        return 0
+    elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso_date" "+%s" 2>/dev/null; then
+        return 0
+    else
+        echo 0
+        return 1
+    fi
+}
+
+one_year_ago_epoch() {
+    if date -d "1 year ago" +%s 2>/dev/null; then
+        return 0
+    elif date -v-1y +%s 2>/dev/null; then
+        return 0
+    else
+        echo 0
+        return 1
+    fi
+}
+
 echo -e "${BLUE}🔍 Reviewing SSH Keys${NC}" | tee -a "$LOG_FILE"
 SSH_KEYS=$(gh api user/keys 2>/dev/null)
 
@@ -36,11 +60,11 @@ else
     echo "$SSH_KEYS" | jq '.' >> "$LOG_FILE"
 
     # Check for old keys (>1 year)
+    one_year_ago=$(one_year_ago_epoch)
     for i in $(seq 0 $(($COUNT - 1))); do
         key_date=$(echo "$SSH_KEYS" | jq -r ".[$i].created_at")
         key_title=$(echo "$SSH_KEYS" | jq -r ".[$i].title")
-        key_epoch=$(date -d "$key_date" +%s)
-        one_year_ago=$(date -d "1 year ago" +%s)
+        key_epoch=$(parse_epoch "$key_date") || continue
         if [[ "$key_epoch" -lt "$one_year_ago" ]]; then
             print_result "WARN" "SSH key '$key_title' is older than 1 year."
         fi
@@ -59,4 +83,3 @@ else
 fi
 
 echo -e "\n${GREEN}✅ SSH & GPG key audit complete. See $LOG_FILE for details.${NC}"
-COUNT

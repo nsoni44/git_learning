@@ -68,11 +68,21 @@ parse_epoch() {
 # ============================================================================
 # FIX #2: Secure temp file handling with trap cleanup
 # ============================================================================
+declare -a _TEMP_FILES=()
+
+_cleanup_temp_files() {
+  local f
+  for f in "${_TEMP_FILES[@]:-}"; do
+    [ -n "$f" ] && rm -f "$f"
+  done
+}
+trap _cleanup_temp_files EXIT
+
 secure_temp() {
   local tmpfile
   tmpfile="$(mktemp)" || { err "Failed to create temp file"; return 1; }
   chmod 600 "$tmpfile" || { err "Failed to set temp file permissions"; return 1; }
-  trap "rm -f '$tmpfile'" EXIT
+  _TEMP_FILES+=("$tmpfile")
   echo "$tmpfile"
 }
 
