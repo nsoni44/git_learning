@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# github_key_audit.sh v2.0
+# github_key_audit.sh v2.1
 # Production-ready GitHub SSH/GPG key auditor and manager for WSL / Ubuntu / macOS.
 #
-# Improvements in v2.0:
-#  - Portable date parsing (GNU/BSD compatible)
-#  - Secure temp file handling
-#  - API error handling with timeouts
-#  - Input validation
-#  - Audit logging
-#  - Batch operations
-#  - Export reports (JSON/CSV)
-#  - Better error messages
-#  - Improved menu UX
+# Improvements in v2.1:
+#  - Increased API timeout to 60s (was 30s) for reliability
+#  - Better debugging information
+#  - Fallback without --paginate for slower networks
+#  - More resilient error handling
 #
 # Usage: ./github_key_audit.sh
 # Notes: Requires `gh`, `jq`, `ssh-keygen`. Uses gh interactive login if needed.
@@ -22,7 +17,7 @@ IFS=$'\n\t'
 # Config
 OLD_DAYS_THRESHOLD=365
 AUDIT_LOG="${HOME}/.github_audit.log"
-API_TIMEOUT=30
+API_TIMEOUT=60  # Increased from 30s to 60s for reliability
 
 # Colors for better readability
 RED='\033[0;31m'
@@ -36,6 +31,11 @@ err() { echo -e "${RED}ERROR: $*${NC}" >&2; }
 info() { echo -e "\n${BLUE}[INFO] $*${NC}"; }
 success() { echo -e "${GREEN}✅ $*${NC}"; }
 warn() { echo -e "${YELLOW}⚠️  $*${NC}"; }
+debug() { 
+  if [ "${DEBUG:-0}" = "1" ]; then
+    echo -e "${BLUE}[DEBUG] $*${NC}" >&2
+  fi
+}
 
 prompt_confirm() {
   # $1 = message
@@ -77,15 +77,33 @@ secure_temp() {
 }
 
 # ============================================================================
-# FIX #3: API calls with timeout and error handling
+# FIX #3: Improved API calls with better timeout and error handling
 # ============================================================================
 gh_api() {
-  local output
-  if ! output=$(timeout "$API_TIMEOUT" gh api "$@" 2>&1); then
-    err "GitHub API failed or timed out (${API_TIMEOUT}s). Check your connection or GitHub status."
+  local output exit_code
+  
+  debug "Calling: timeout $API_TIMEOUT gh api $*"
+  
+  if output=$(timeout "$API_TIMEOUT" gh api "$@" 2>&1); then
+    debug "API call successful"
+    echo "$output"
+    return 0
+  else
+    exit_code=$?
+    
+    if [ $exit_code -eq 124 ]; then
+      err "GitHub API timed out after ${API_TIMEOUT}s"
+      err "Try setting: export DEBUG=1 to see more details"
+      err "Or check GitHub status: https://www.githubstatus.com"
+    elif [ $exit_code -eq 1 ]; then
+      # Parse error from output
+      err "GitHub API error: $(echo "$output" | tail -1)"
+    else
+      err "GitHub API failed (exit code: $exit_code)"
+      debug "Full output: $output"
+    fi
     return 1
   fi
-  echo "$output"
 }
 
 # ============================================================================
@@ -175,7 +193,12 @@ ensure_logged_in() {
 # SSH Keys Operations
 # ============================================================================
 fetch_ssh_keys_json() {
-  gh_api user/keys --paginate
+  debug "Fetching SSH keys..."
+  gh_api user/keys --paginate || {
+    # Fallback without --paginate for slower connections
+    debug "Retrying without --paginate..."
+    gh_api user/keys
+  }
 }
 
 list_ssh_keys_pretty() {
@@ -198,6 +221,8 @@ list_ssh_keys_pretty() {
   # Use mapfile to avoid subshell variable loss
   local -a lines=()
   mapfile -t lines < <(echo "$json" | jq -r '.[] | @base64')
+  
+  debug "Found ${#lines[@]} SSH keys"
   
   for line in "${lines[@]}"; do
     _jq() { echo "${line}" | base64 --decode | jq -r "${1}"; }
@@ -273,6 +298,8 @@ find_old_ssh_keys() {
   local count=0
   local -a lines=()
   mapfile -t lines < <(echo "$json" | jq -r '.[] | @base64')
+  
+  debug "Checking ${#lines[@]} keys for age > $OLD_DAYS_THRESHOLD days"
   
   for line in "${lines[@]}"; do
     _jq() { echo "${line}" | base64 --decode | jq -r "${1}"; }
@@ -602,8 +629,9 @@ main_menu() {
 main() {
   check_deps
   ensure_logged_in
-  info "Starting GitHub Key Auditor v2.0. Threshold for 'old' keys is ${OLD_DAYS_THRESHOLD} days."
+  info "Starting GitHub Key Auditor v2.1. Threshold for 'old' keys is ${OLD_DAYS_THRESHOLD} days."
   info "Audit log: $AUDIT_LOG"
+  echo "Tip: Set DEBUG=1 for detailed troubleshooting: DEBUG=1 ./github_key_audit.sh"
   main_menu
 }
 
