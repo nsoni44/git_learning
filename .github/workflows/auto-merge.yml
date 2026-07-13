@@ -1,0 +1,96 @@
+name: Auto-Merge PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'nsoni44' && github.event.pull_request.draft == false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Wait for status checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo, number } = context.issue;
+            let attempts = 0;
+            const maxAttempts = 30; // 5 minutes (30 * 10 seconds)
+            
+            while (attempts < maxAttempts) {
+              const pr = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: number,
+              });
+              
+              console.log(`Attempt ${attempts + 1}: Mergeable state = ${pr.data.mergeable_state}`);
+              
+              if (pr.data.mergeable_state === 'clean' || pr.data.mergeable_state === 'has_hooks') {
+                console.log('✅ All checks passed! Ready to merge.');
+                return true;
+              }
+              
+              if (pr.data.mergeable_state === 'dirty' || pr.data.mergeable_state === 'blocked') {
+                console.log('❌ Merge blocked or has conflicts. Aborting auto-merge.');
+                process.exit(1);
+              }
+              
+              attempts++;
+              await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+            }
+            
+            console.log('⏱️ Timeout waiting for checks. Aborting auto-merge.');
+            process.exit(1);
+
+      - name: Auto-merge PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo, number } = context.issue;
+            const pr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: number,
+            });
+            
+            if (pr.data.mergeable && (pr.data.mergeable_state === 'clean' || pr.data.mergeable_state === 'has_hooks')) {
+              await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: number,
+                merge_method: 'squash',
+                commit_title: pr.data.title,
+                commit_message: pr.data.body || '',
+              });
+              console.log('✅ PR merged successfully!');
+            } else {
+              console.log('⚠️ PR not in mergeable state. Skipping auto-merge.');
+              process.exit(1);
+            }
+
+      - name: Delete branch
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const ref = context.payload.pull_request.head.ref;
+            
+            try {
+              await github.rest.git.deleteRef({
+                owner,
+                repo,
+                ref: `heads/${ref}`,
+              });
+              console.log(`✅ Branch '${ref}' deleted.`);
+            } catch (error) {
+              console.log(`⚠️ Could not delete branch '${ref}': ${error.message}`);
+            }
